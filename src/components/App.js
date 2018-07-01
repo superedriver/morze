@@ -1,4 +1,5 @@
 import React, { Component } from 'react';
+import Kefir from 'kefir';
 import './App.css';
 import morse from '../morze.png'
 import {
@@ -14,14 +15,15 @@ import {
 const getSymbol = symbolDuration => symbolDuration <= DOT_DURATION ? DOT : DASH;
 const isPauseShort = pause => pause < DOT_DURATION;
 const INITIAL_STATE = {
-  startPauseTime: null,
-  startPressingTime: null,
-  symbol: null,
+  symbol: '',
   letterCode: '',
   word: '',
+  startKeyDown: null,
+  startKeyUp: null,
 };
 
 class App extends Component {
+
   constructor() {
     super();
 
@@ -29,68 +31,75 @@ class App extends Component {
 
     this.handleSpaceDown = this.handleSpaceDown.bind(this);
     this.handleSpaceUp = this.handleSpaceUp.bind(this);
-    this.analizeLetterCode = this.analizeLetterCode.bind(this);
     this.handleClearClick = this.handleClearClick.bind(this);
+    this.updateLetter = this.updateLetter.bind(this);
+    this.updateWord = this.updateWord.bind(this);
   }
 
   componentWillMount() {
-    document.addEventListener('keydown', this.handleSpaceDown);
-    document.addEventListener('keyup', this.handleSpaceUp);
+    Kefir.fromEvents(document.body, 'keydown')
+      .filter(event => event.keyCode === BUTTON_CODE)
+      .onValue(this.handleSpaceDown);
+    Kefir.fromEvents(document.body, 'keyup')
+      .filter(event => event.keyCode === BUTTON_CODE)
+      .onValue(this.handleSpaceUp);
   }
 
-  componentWillUnmount() {
-    document.removeEventListener('keydown', this.handleSpaceDown);
-    document.removeEventListener('keyup', this.handleSpaceUp);
-  }
-
-  analizeLetterCode(letterCode) {
-    const letter = CODE_TO_LETTER[letterCode] || ERROR;
+  updateLetter(e) {
+    const { symbol, letterCode } = this.state;
 
     this.setState({
       ...this.state,
-      word: this.state.word + letter,
+      startKeyDown: e.timeStamp,
+      startKeyUp: null,
+      symbol: '',
+      letterCode: letterCode + symbol,
+    });
+  }
+
+  updateWord(e) {
+    const { symbol, word, letterCode } = this.state;
+    const letter = CODE_TO_LETTER[letterCode + symbol] || ERROR;
+
+    this.setState({
+      ...this.state,
+      startKeyDown: e.timeStamp,
+      startKeyUp: null,
+      symbol: '',
+      letterCode: '',
+      word: word + letter,
     });
   }
 
   handleSpaceDown(e) {
-    const { startPressingTime, startPauseTime, symbol } = this.state;
+    const { startKeyUp, startKeyDown } = this.state;
 
-    if (!startPressingTime && e.keyCode === BUTTON_CODE) {
-      const letterCode = this.state.letterCode + symbol;
-      const pauseDuration = Date.now() - startPauseTime;
+    if (!startKeyDown && startKeyUp) {
+      const pauseDuration = e.timeStamp - startKeyUp;
 
-      if (isPauseShort(pauseDuration)) {
-        this.setState({
-          ...this.state,
-          startPressingTime: Date.now(),
-          startPauseTime: null,
-          letterCode,
-          symbol: null,
-        });
+      if(isPauseShort(pauseDuration)) {
+        this.updateLetter(e);
       } else {
-        this.setState({
-          ...this.state,
-          startPressingTime: Date.now(),
-          startPauseTime: null,
-          letterCode: '',
-        });
-
-        if (symbol) this.analizeLetterCode(letterCode);
+        this.updateWord(e);
       }
+    } else if (!startKeyDown && !startKeyUp) {
+      this.setState({
+        ...this.state,
+        startKeyDown: e.timeStamp,
+      });
     }
   }
 
-  handleSpaceUp(e) {
-    const { startPressingTime } = this.state;
-    const symbol = getSymbol(Date.now() - startPressingTime);
+  handleSpaceUp(event) {
+    const startKeyUp = event.timeStamp;
+    const { startKeyDown } = this.state;
+    const symbol = getSymbol(startKeyUp - startKeyDown);
 
-    if (startPressingTime && e.keyCode === BUTTON_CODE) {
-      this.setState({
-        startPressingTime: null,
-        startPauseTime: Date.now(),
-        symbol,
-      });
-    }
+    this.setState({
+      startKeyDown: null,
+      startKeyUp,
+      symbol,
+    });
   }
 
   handleClearClick() {
@@ -98,7 +107,10 @@ class App extends Component {
   }
 
   render() {
-    const { word } = this.state;
+    const { word, startKeyDown } = this.state;
+    const rectClassName = startKeyDown
+      ? '-red'
+      : '-green';
 
     return (
       <div className="App">
@@ -108,6 +120,8 @@ class App extends Component {
           alt="morse code"
           width="300"
         />
+        <br/>
+        <div className={`rectangle ${rectClassName}`} />
         <br/>
         <button onClick={this.handleClearClick}>
           Clear
