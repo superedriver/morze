@@ -1,5 +1,4 @@
 import React, { Component } from 'react';
-import Kefir from 'kefir';
 import './App.css';
 import morse from '../morze.png'
 import {
@@ -20,6 +19,7 @@ const INITIAL_STATE = {
   word: '',
   startKeyDown: null,
   startKeyUp: null,
+  pauseTimerId: null,
 };
 
 class App extends Component {
@@ -34,15 +34,24 @@ class App extends Component {
     this.handleClearClick = this.handleClearClick.bind(this);
     this.updateLetter = this.updateLetter.bind(this);
     this.updateWord = this.updateWord.bind(this);
+    this.getLetter = this.getLetter.bind(this);
+    this.handlePauseTimeoutEnd = this.handlePauseTimeoutEnd.bind(this);
   }
 
   componentWillMount() {
-    Kefir.fromEvents(document.body, 'keydown')
-      .filter(event => event.keyCode === BUTTON_CODE)
-      .onValue(this.handleSpaceDown);
-    Kefir.fromEvents(document.body, 'keyup')
-      .filter(event => event.keyCode === BUTTON_CODE)
-      .onValue(this.handleSpaceUp);
+    document.addEventListener('keydown', this.handleSpaceDown);
+    document.addEventListener('keyup', this.handleSpaceUp);
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener('keydown', this.handleSpaceDown);
+    document.removeEventListener('keyup', this.handleSpaceUp);
+  }
+
+  getLetter() {
+    const { symbol, letterCode } = this.state;
+
+    return CODE_TO_LETTER[letterCode + symbol] || ERROR;
   }
 
   updateLetter(e) {
@@ -58,8 +67,8 @@ class App extends Component {
   }
 
   updateWord(e) {
-    const { symbol, word, letterCode } = this.state;
-    const letter = CODE_TO_LETTER[letterCode + symbol] || ERROR;
+    const { word } = this.state;
+    const letter = this.getLetter();
 
     this.setState({
       ...this.state,
@@ -72,34 +81,53 @@ class App extends Component {
   }
 
   handleSpaceDown(e) {
-    const { startKeyUp, startKeyDown } = this.state;
+    if(e.keyCode === BUTTON_CODE) {
+      const { startKeyUp, startKeyDown, pauseTimerId } = this.state;
 
-    if (!startKeyDown && startKeyUp) {
-      const pauseDuration = e.timeStamp - startKeyUp;
-
-      if(isPauseShort(pauseDuration)) {
-        this.updateLetter(e);
-      } else {
-        this.updateWord(e);
+      if(pauseTimerId) {
+        clearTimeout(pauseTimerId)
       }
-    } else if (!startKeyDown && !startKeyUp) {
-      this.setState({
-        ...this.state,
-        startKeyDown: e.timeStamp,
-      });
+
+      if (!startKeyDown && startKeyUp) {
+        const pauseDuration = e.timeStamp - startKeyUp;
+
+        if(isPauseShort(pauseDuration)) {
+          this.updateLetter(e);
+        } else {
+          this.updateWord(e);
+        }
+      } else if (!startKeyDown && !startKeyUp) {
+        this.setState({
+          ...this.state,
+          startKeyDown: e.timeStamp,
+        });
+      }
     }
   }
 
-  handleSpaceUp(event) {
-    const startKeyUp = event.timeStamp;
-    const { startKeyDown } = this.state;
-    const symbol = getSymbol(startKeyUp - startKeyDown);
+  handlePauseTimeoutEnd() {
+    const { word } = this.state;
+    const letter = this.getLetter();
 
     this.setState({
-      startKeyDown: null,
-      startKeyUp,
-      symbol,
+      ...INITIAL_STATE,
+      word: word + letter,
     });
+  }
+
+  handleSpaceUp(e) {
+    if(e.keyCode === BUTTON_CODE) {
+      const startKeyUp = e.timeStamp;
+      const { startKeyDown } = this.state;
+      const symbol = getSymbol(startKeyUp - startKeyDown);
+
+      this.setState({
+        startKeyDown: null,
+        startKeyUp,
+        symbol,
+        pauseTimerId: setTimeout(this.handlePauseTimeoutEnd, DOT_DURATION),
+      });
+    }
   }
 
   handleClearClick() {
