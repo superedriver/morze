@@ -12,7 +12,7 @@ import {
 
 // additional code
 const getSymbol = symbolDuration => symbolDuration <= DOT_DURATION ? DOT : DASH;
-const isPauseShort = pause => pause < DOT_DURATION;
+const isPauseShort = pauseDuration => pauseDuration < DOT_DURATION;
 const INITIAL_STATE = {
   symbol: '',
   letterCode: '',
